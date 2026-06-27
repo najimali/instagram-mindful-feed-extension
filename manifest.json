@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Instagram Mindful Feed",
+  "version": "3.0.0",
+  "description": "Calm, intentional Instagram — your own book-style reading view.",
+  "permissions": ["storage"],
+  "action": {
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ]
+}

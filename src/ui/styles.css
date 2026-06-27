@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+/* ── Page-turn animations ── */
+@keyframes page-in-next {
+  from { transform: translateX(48px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes page-in-prev {
+  from { transform: translateX(-48px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+.mfm-turn-next {
+  animation: page-in-next 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.mfm-turn-prev {
+  animation: page-in-prev 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* ── Carousel ── */
+.mfm-carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  height: 100%;
+}
+.mfm-carousel::-webkit-scrollbar { display: none; }
+.mfm-carousel-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  height: 100%;
+}
