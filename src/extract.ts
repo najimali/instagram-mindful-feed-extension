@@ -62,18 +62,33 @@ export function extractPost(article: Element): Post | null {
   // Keep a reference to IG's actual element — we'll move (not clone) it so the buffer plays
 
   // ── Photos ────────────────────────────────────────────────────────────────
-  // Only collect if this isn't a video post (video posts have no real imgs)
   const images: string[] = [];
   if (!videoEl) {
+    // IG renders carousel slides inside <ul><li> — scope to that to avoid
+    // picking up "suggested users" avatars or related-post thumbnails that
+    // also live inside the same <article>.
+    const carouselImgs = Array.from(
+      article.querySelectorAll<HTMLImageElement>('ul img')
+    ).filter(img => img !== avatarEl && img.src && !img.src.startsWith('data:'));
+
     const seen = new Set<string>();
-    for (const img of Array.from(article.querySelectorAll<HTMLImageElement>('img'))) {
-      if (img === avatarEl) continue;
-      if (!img.src || img.src.startsWith('data:')) continue;
-      const src = bestSrc(img);
-      if (src && !seen.has(src)) { seen.add(src); images.push(src); }
+    if (carouselImgs.length > 0) {
+      for (const img of carouselImgs) {
+        const src = bestSrc(img);
+        if (src && !seen.has(src)) { seen.add(src); images.push(src); }
+      }
+    } else {
+      // Single-image post: take only the FIRST non-avatar img.
+      // Stopping at one prevents grabbing suggestion-row thumbnails that
+      // appear later in the same article DOM.
+      for (const img of Array.from(article.querySelectorAll<HTMLImageElement>('img'))) {
+        if (img === avatarEl) continue;
+        if (!img.src || img.src.startsWith('data:')) continue;
+        const src = bestSrc(img);
+        if (src) { images.push(src); break; }
+      }
     }
   } else if (videoPoster) {
-    // For video posts, use the poster as the thumbnail in the carousel
     images.push(videoPoster);
   }
 
