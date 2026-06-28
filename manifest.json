@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Instagram Mindful Feed",
+  "name": "Feed Purifier",
   "version": "3.0.0",
-  "description": "Calm, intentional Instagram — your own book-style reading view.",
+  "description": "Purify your feed across Instagram, YouTube, and LinkedIn — cut the noise, keep what matters.",
   "permissions": ["storage"],
   "action": {
     "default_icon": {

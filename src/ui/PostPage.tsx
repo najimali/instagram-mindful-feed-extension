@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { Post } from "../extract";
+import type { FeedPost } from "../core/types";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -14,7 +14,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export function PostPage({ post }: { post: Post }) {
+export function PostPage({ post }: { post: FeedPost }) {
   const [slide, setSlide] = useState(0);
 
   // Reset carousel to first slide whenever the post changes
@@ -73,10 +73,10 @@ export function PostPage({ post }: { post: Post }) {
             flexShrink: 0,
           }}
         >
-          {post.avatarSrc && (
+          {post.author.avatarUrl && (
             <img
-              src={post.avatarSrc}
-              alt={post.username}
+              src={post.author.avatarUrl}
+              alt={post.author.username}
               style={{
                 width: "40px",
                 height: "40px",
@@ -89,7 +89,7 @@ export function PostPage({ post }: { post: Post }) {
           )}
           <div style={{ minWidth: 0 }}>
             <a
-              href={post.userHref}
+              href={post.author.profileUrl}
               target="_blank"
               rel="noreferrer"
               style={{
@@ -106,7 +106,7 @@ export function PostPage({ post }: { post: Post }) {
                 whiteSpace: "nowrap",
               }}
             >
-              {post.username}
+              {post.author.username}
             </a>
             {post.timestamp && (
               <time
@@ -201,7 +201,7 @@ function MediaPanel({
   slide,
   onSlide,
 }: {
-  post: Post;
+  post: FeedPost;
   slide: number;
   onSlide: (n: number) => void;
 }) {
@@ -231,7 +231,7 @@ function MediaPanel({
       imgs={imgs}
       slide={slide}
       onSlide={onSlide}
-      username={post.username}
+      username={post.author.username}
     />
   );
 }
@@ -333,35 +333,91 @@ function PhotoCarousel({
   );
 }
 
-// ── VideoPanel — moves IG's actual <video> element (preserves buffer) ────────
+// ── VideoPanel ────────────────────────────────────────────────────────────────
+// Two strategies depending on video type:
+//
+//  A) Direct src (MP4/CDN): move the <video> node into our container.
+//     Works fine — src is a plain URL, survives DOM reparenting.
+//
+//  B) Blob src (DASH/MSE): IG uses MediaSource to feed a blob: URL.
+//     The MSE binding is tied to the original document context and
+//     breaks when the element is reparented across shadow roots.
+//     Instead we position-track: keep the video in IG's DOM but
+//     absolutely position it to exactly cover our panel using a
+//     ResizeObserver + rAF loop. Invisible in IG's hidden feed
+//     (visibility:hidden), fully visible in ours (forced visible).
 
 function VideoPanel({ videoEl }: { videoEl: HTMLVideoElement }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = videoEl;
+    const el        = videoEl;
     const container = containerRef.current;
     if (!el || !container) return;
 
-    const originalParent = el.parentElement;
-    const nextSibling = el.nextSibling;
+    const isBlob = el.src.startsWith("blob:");
 
-    const placeholder = document.createElement("div");
-    placeholder.style.cssText = `width:${el.offsetWidth}px;height:${el.offsetHeight}px;`;
-    originalParent?.insertBefore(placeholder, el);
+    if (!isBlob) {
+      // ── Strategy A: move the node ──────────────────────────────────────────
+      const originalParent = el.parentElement;
+      const nextSibling    = el.nextSibling;
+      const placeholder    = document.createElement("div");
+      placeholder.style.cssText = `width:${el.offsetWidth}px;height:${el.offsetHeight}px;`;
+      originalParent?.insertBefore(placeholder, el);
 
-    el.style.cssText =
-      "width:100%;height:100%;object-fit:contain;display:block;background:#111;";
-    el.controls = true;
+      el.style.cssText = "width:100%;height:100%;object-fit:contain;display:block;background:#111;";
+      el.controls      = true;
+      el.playsInline   = true;
+      container.appendChild(el);
+
+      return () => {
+        el.style.cssText = "";
+        if (originalParent && placeholder.parentElement === originalParent) {
+          originalParent.insertBefore(el, nextSibling || placeholder);
+          placeholder.remove();
+        }
+      };
+    }
+
+    // ── Strategy B: position-track the blob video ──────────────────────────
+    // Keep video in IG's DOM but make it visible and overlay our panel exactly.
+    const saved = {
+      position:   el.style.position,
+      top:        el.style.top,
+      left:       el.style.left,
+      width:      el.style.width,
+      height:     el.style.height,
+      zIndex:     el.style.zIndex,
+      visibility: el.style.visibility,
+      objectFit:  el.style.objectFit,
+      background: el.style.background,
+    };
+
+    el.controls    = true;
     el.playsInline = true;
-    container.appendChild(el);
+
+    let rafId = 0;
+    function sync() {
+      const rect = container.getBoundingClientRect();
+      el.style.cssText = [
+        `position:fixed`,
+        `top:${rect.top}px`,
+        `left:${rect.left}px`,
+        `width:${rect.width}px`,
+        `height:${rect.height}px`,
+        `z-index:9999`,
+        `visibility:visible`,
+        `object-fit:contain`,
+        `background:#111`,
+        `pointer-events:auto`,
+      ].join(";");
+      rafId = requestAnimationFrame(sync);
+    }
+    sync();
 
     return () => {
-      el.style.cssText = "";
-      if (originalParent && placeholder.parentElement === originalParent) {
-        originalParent.insertBefore(el, nextSibling || placeholder);
-        placeholder.remove();
-      }
+      cancelAnimationFrame(rafId);
+      Object.assign(el.style, saved);
     };
   }, [videoEl]);
 

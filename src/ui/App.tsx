@@ -1,8 +1,44 @@
 import { useState, useEffect, useCallback } from "react";
-import type { Post } from "../extract";
+import type { FeedPost } from "../core/types";
 import { PostPage } from "./PostPage";
 
-export function App({ posts }: { posts: Post[] }) {
+// Paper-rustle synthesized from Web Audio noise — no external asset needed.
+// ponytail: 200ms noise burst; replace with recorded sample if too digital.
+function playPageTurn(dir: "next" | "prev") {
+  try {
+    const ctx  = new AudioContext();
+    const len  = ctx.sampleRate * 0.18;
+    const buf  = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    // Pink-ish noise: accumulate 3 white noise layers at different speeds
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520;
+      data[i] = (b0 + b1 + b2 + w * 0.5362) * 0.11;
+    }
+    // Exponential decay envelope
+    for (let i = 0; i < len; i++) data[i] *= Math.exp(-i / (len * 0.28));
+
+    const src    = ctx.createBufferSource();
+    src.buffer   = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type  = "bandpass";
+    filter.frequency.value = dir === "next" ? 2200 : 1800;
+    filter.Q.value = 0.6;
+
+    const gain     = ctx.createGain();
+    gain.gain.value = 0.55;
+
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+    src.onended = () => ctx.close();
+  } catch { /* ignore — AudioContext blocked or unavailable */ }
+}
+
+export function App({ posts }: { posts: FeedPost[] }) {
   const [current, setCurrent] = useState(0);
   const [dir, setDir] = useState<"next" | "prev">("next");
   const [animKey, setAnimKey] = useState(0); // bumped to re-trigger animation
@@ -12,8 +48,10 @@ export function App({ posts }: { posts: Post[] }) {
       setCurrent((c) => {
         const next = Math.max(0, Math.min(posts.length - 1, c + delta));
         if (next === c) return c;
-        setDir(delta === 1 ? "next" : "prev");
+        const d = delta === 1 ? "next" : "prev";
+        setDir(d);
         setAnimKey((k) => k + 1);
+        playPageTurn(d);
         return next;
       });
     },
