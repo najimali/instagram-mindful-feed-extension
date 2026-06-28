@@ -1,8 +1,7 @@
 // Instagram DOM Scanner — reads IG's rendered articles and produces FeedPost[].
 // Only responsibility: translate IG DOM → structured data.
-// Classification happens in FeedClassifier, not here.
 
-import { FeedPost, Author } from '../../core/types';
+import { FeedPost, Slide, Author } from '../../core/types';
 import { classifyArticle } from '../../core/feed-classifier';
 
 const PROFILE_HREF = /^\/[^/]+\/?$/;
@@ -42,36 +41,69 @@ function extractAuthor(article: Element): Author {
   };
 }
 
-function extractImages(article: Element, avatarEl: HTMLImageElement | null, hasVideo: boolean): string[] {
-  if (hasVideo) return [];
+// Extract a CDN video URL from a <video> element.
+// IG puts the real URL in <source src>, or directly on video.src if not blob.
+function videoSrc(el: HTMLVideoElement): string {
+  // Prefer <source> child — IG usually puts the CDN mp4 there even when
+  // video.src is a blob: wrapper.
+  const source = el.querySelector<HTMLSourceElement>('source[src]');
+  if (source?.src && !source.src.startsWith('blob:')) return source.src;
+  if (el.src && !el.src.startsWith('blob:')) return el.src;
+  // blob: URL — MSE stream, can't be transferred; fall back to poster
+  return '';
+}
 
-  const carouselImgs = Array.from(
-    article.querySelectorAll<HTMLImageElement>('ul img')
-  ).filter(img => img !== avatarEl && img.src && !img.src.startsWith('data:'));
-
+function extractSlides(article: Element, avatarEl: HTMLImageElement | null): Slide[] {
+  const slides: Slide[] = [];
   const seen = new Set<string>();
-  const images: string[] = [];
 
-  if (carouselImgs.length > 0) {
-    for (const img of carouselImgs) {
-      const src = bestSrc(img);
-      if (src && !seen.has(src)) { seen.add(src); images.push(src); }
+  const add = (s: Slide) => {
+    const key = s.url || s.poster || '';
+    if (key && !seen.has(key)) { seen.add(key); slides.push(s); }
+  };
+
+  // Carousel: <ul> contains one <li> per slide; each can be img or video
+  const liEls = Array.from(article.querySelectorAll<HTMLElement>('ul > li'));
+  if (liEls.length > 0) {
+    for (const li of liEls) {
+      const vid = li.querySelector<HTMLVideoElement>('video');
+      if (vid) {
+        const url    = videoSrc(vid);
+        const poster = vid.poster || '';
+        // Always add; if no CDN url use poster so the slot isn't blank
+        add({ type: 'video', url: url || poster, poster: poster || undefined });
+        continue;
+      }
+      const img = Array.from(li.querySelectorAll<HTMLImageElement>('img'))
+        .find(i => i !== avatarEl && i.src && !i.src.startsWith('data:'));
+      if (img) add({ type: 'image', url: bestSrc(img) });
     }
-  } else {
-    for (const img of Array.from(article.querySelectorAll<HTMLImageElement>('img'))) {
-      if (img === avatarEl) continue;
-      if (!img.src || img.src.startsWith('data:')) continue;
-      const src = bestSrc(img);
-      if (src) { images.push(src); break; }
-    }
+    return slides;
   }
 
-  return images;
+  // Single video post
+  const vid = article.querySelector<HTMLVideoElement>('video');
+  if (vid) {
+    const url    = videoSrc(vid);
+    const poster = vid.poster || '';
+    add({ type: 'video', url: url || poster, poster: poster || undefined });
+    return slides;
+  }
+
+  // Single photo post — take first non-avatar, non-data img
+  for (const img of Array.from(article.querySelectorAll<HTMLImageElement>('img'))) {
+    if (img === avatarEl) continue;
+    if (!img.src || img.src.startsWith('data:')) continue;
+    add({ type: 'image', url: bestSrc(img) });
+    break;
+  }
+
+  return slides;
 }
 
 function extractCaption(article: Element, username: string): string {
   const spans = Array.from(article.querySelectorAll<HTMLElement>('span[dir="auto"]'));
-  let caption = spans
+  const caption = spans
     .map(s => (s.textContent || '').trim())
     .filter(t => t.length > 5 && t !== username && t.toLowerCase() !== 'more')
     .sort((a, b) => b.length - a.length)[0] || '';
@@ -84,31 +116,20 @@ export function scanArticle(article: Element): FeedPost | null {
   if (!shortcode) return null;
 
   const { type, reason } = classifyArticle(article);
-
   const author   = extractAuthor(article);
   const avatarEl = article.querySelector<HTMLImageElement>('img[alt*="profile picture" i]');
-  const videoEl  = article.querySelector<HTMLVideoElement>('video');
-  const images   = extractCaption(article, author.username)
-    ? extractImages(article, avatarEl, !!videoEl)
-    : extractImages(article, avatarEl, !!videoEl);
-
-  const videoPoster = videoEl?.poster || null;
-  if (videoEl && videoPoster) images.push(videoPoster);
-
-  const caption   = extractCaption(article, author.username);
-  const timeEl    = article.querySelector('time');
-  const timestamp = timeEl?.getAttribute('datetime') || '';
+  const slides   = extractSlides(article, avatarEl);
+  const caption  = extractCaption(article, author.username);
+  const timeEl   = article.querySelector('time');
 
   return {
     id: shortcode,
     type,
     reason,
     author,
-    images,
-    videoEl:     videoEl || null,
-    videoPoster,
+    slides,
     caption,
-    timestamp,
+    timestamp: timeEl?.getAttribute('datetime') || '',
   };
 }
 

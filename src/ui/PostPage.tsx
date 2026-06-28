@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { FeedPost } from "../core/types";
+import type { FeedPost, Slide } from "../core/types";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -17,10 +17,9 @@ function formatDate(iso: string): string {
 export function PostPage({ post }: { post: FeedPost }) {
   const [slide, setSlide] = useState(0);
 
-  // Reset carousel to first slide whenever the post changes
-  useEffect(() => {
-    setSlide(0);
-  }, [post.id]);
+  useEffect(() => { setSlide(0); }, [post.id]);
+
+  const slides = post.slides;
 
   return (
     <article
@@ -39,7 +38,7 @@ export function PostPage({ post }: { post: FeedPost }) {
         background: "#ffffff",
       }}
     >
-      {/* ── LEFT: media ─────────────────────────────────────────────────── */}
+      {/* ── LEFT: media ──────────────────────────────────────────────── */}
       <div
         style={{
           position: "relative",
@@ -48,10 +47,10 @@ export function PostPage({ post }: { post: FeedPost }) {
           height: "100%",
         }}
       >
-        <MediaPanel post={post} slide={slide} onSlide={setSlide} />
+        <MediaPanel slides={slides} slide={slide} onSlide={setSlide} />
       </div>
 
-      {/* ── RIGHT: content ──────────────────────────────────────────────── */}
+      {/* ── RIGHT: content ───────────────────────────────────────────── */}
       <div
         style={{
           display: "flex",
@@ -94,8 +93,7 @@ export function PostPage({ post }: { post: FeedPost }) {
               rel="noreferrer"
               style={{
                 display: "block",
-                fontFamily:
-                  '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                 fontWeight: 700,
                 fontSize: "14px",
                 color: "#1a1209",
@@ -109,13 +107,7 @@ export function PostPage({ post }: { post: FeedPost }) {
               {post.author.username}
             </a>
             {post.timestamp && (
-              <time
-                style={{
-                  fontFamily: "-apple-system, sans-serif",
-                  fontSize: "11px",
-                  color: "#a8998a",
-                }}
-              >
+              <time style={{ fontFamily: "-apple-system, sans-serif", fontSize: "11px", color: "#a8998a" }}>
                 {formatDate(post.timestamp)}
               </time>
             )}
@@ -148,15 +140,7 @@ export function PostPage({ post }: { post: FeedPost }) {
               {post.caption}
             </p>
           ) : (
-            <p
-              style={{
-                fontFamily: "Georgia, serif",
-                fontSize: "15px",
-                color: "#b5a99a",
-                fontStyle: "italic",
-                margin: 0,
-              }}
-            >
+            <p style={{ fontFamily: "Georgia, serif", fontSize: "15px", color: "#b5a99a", fontStyle: "italic", margin: 0 }}>
               No caption.
             </p>
           )}
@@ -194,237 +178,84 @@ export function PostPage({ post }: { post: FeedPost }) {
   );
 }
 
-// ── MediaPanel ───────────────────────────────────────────────────────────────
+// ── MediaPanel ────────────────────────────────────────────────────────────────
 
 function MediaPanel({
-  post,
+  slides,
   slide,
   onSlide,
 }: {
-  post: FeedPost;
+  slides: Slide[];
   slide: number;
   onSlide: (n: number) => void;
 }) {
-  if (post.videoEl) return <VideoPanel videoEl={post.videoEl} />;
-
-  const imgs = post.images;
-  if (imgs.length === 0) {
+  if (slides.length === 0) {
     return (
-      <div
-        style={{
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#5a4a3a",
-          fontFamily: "Georgia, serif",
-          fontSize: "13px",
-        }}
-      >
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#5a4a3a", fontFamily: "Georgia, serif", fontSize: "13px" }}>
         No media
       </div>
     );
   }
 
-  return (
-    <PhotoCarousel
-      imgs={imgs}
-      slide={slide}
-      onSlide={onSlide}
-      username={post.author.username}
-    />
-  );
-}
-
-// ── PhotoCarousel — imperative scroll so snap actually moves ─────────────────
-
-function PhotoCarousel({
-  imgs,
-  slide,
-  onSlide,
-  username,
-}: {
-  imgs: string[];
-  slide: number;
-  onSlide: (n: number) => void;
-  username: string;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  // Imperatively scroll to the correct slide whenever `slide` changes
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const slideWidth = track.clientWidth;
-    track.scrollTo({ left: slideWidth * slide, behavior: "smooth" });
-  }, [slide]);
-
   const prev = () => onSlide(Math.max(0, slide - 1));
-  const next = () => onSlide(Math.min(imgs.length - 1, slide + 1));
+  const next = () => onSlide(Math.min(slides.length - 1, slide + 1));
 
   return (
     <>
-      {/* Scroll track */}
-      <div ref={trackRef} className="mfm-carousel" style={{ height: "100%" }}>
-        {imgs.map((src, i) => (
-          <div
-            key={i}
-            className="mfm-carousel-slide"
-            style={{ background: "#111" }}
-          >
-            <img
-              src={src}
-              alt={`${username} — ${i + 1}`}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                objectPosition: "center",
-                display: "block",
-              }}
-            />
-          </div>
-        ))}
-      </div>
+      <SlideView s={slides[slide]} />
 
       {/* Dot indicators */}
-      {imgs.length > 1 && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "12px",
-            left: 0,
-            right: 0,
-            display: "flex",
-            justifyContent: "center",
-            gap: "5px",
-            pointerEvents: "none",
-          }}
-        >
-          {imgs.map((_, i) => (
-            <span
-              key={i}
-              style={{
-                width: "5px",
-                height: "5px",
-                borderRadius: "50%",
-                background: "white",
-                opacity: i === slide ? 1 : 0.35,
-                transition: "opacity 0.2s",
-              }}
-            />
+      {slides.length > 1 && (
+        <div style={{ position: "absolute", bottom: "12px", left: 0, right: 0, display: "flex", justifyContent: "center", gap: "5px", pointerEvents: "none" }}>
+          {slides.map((_, i) => (
+            <span key={i} style={{ width: "5px", height: "5px", borderRadius: "50%", background: "white", opacity: i === slide ? 1 : 0.35, transition: "opacity 0.2s" }} />
           ))}
         </div>
       )}
 
-      {/* Prev arrow */}
-      {imgs.length > 1 && slide > 0 && (
-        <button onClick={prev} style={arrowBtn("left")} aria-label="Prev">
-          ‹
-        </button>
+      {slides.length > 1 && slide > 0 && (
+        <button onClick={prev} style={arrowBtn("left")} aria-label="Prev">‹</button>
       )}
-      {/* Next arrow */}
-      {imgs.length > 1 && slide < imgs.length - 1 && (
-        <button onClick={next} style={arrowBtn("right")} aria-label="Next">
-          ›
-        </button>
+      {slides.length > 1 && slide < slides.length - 1 && (
+        <button onClick={next} style={arrowBtn("right")} aria-label="Next">›</button>
       )}
     </>
   );
 }
 
-// ── VideoPanel ────────────────────────────────────────────────────────────────
-// Two strategies depending on video type:
-//
-//  A) Direct src (MP4/CDN): move the <video> node into our container.
-//     Works fine — src is a plain URL, survives DOM reparenting.
-//
-//  B) Blob src (DASH/MSE): IG uses MediaSource to feed a blob: URL.
-//     The MSE binding is tied to the original document context and
-//     breaks when the element is reparented across shadow roots.
-//     Instead we position-track: keep the video in IG's DOM but
-//     absolutely position it to exactly cover our panel using a
-//     ResizeObserver + rAF loop. Invisible in IG's hidden feed
-//     (visibility:hidden), fully visible in ours (forced visible).
+// ── SlideView — renders one slide (image or video) ────────────────────────────
 
-function VideoPanel({ videoEl }: { videoEl: HTMLVideoElement }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+function SlideView({ s }: { s: Slide }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Pause/play when slide becomes active/inactive
   useEffect(() => {
-    const el        = videoEl;
-    const container = containerRef.current;
-    if (!el || !container) return;
+    const el = videoRef.current;
+    if (!el) return;
+    el.play().catch(() => {});
+    return () => { el.pause(); };
+  }, [s]);
 
-    const isBlob = el.src.startsWith("blob:");
+  if (s.type === 'video' && s.url && s.url !== s.poster) {
+    return (
+      <video
+        ref={videoRef}
+        src={s.url}
+        poster={s.poster}
+        controls
+        playsInline
+        style={{ width: "100%", height: "100%", objectFit: "contain", background: "#111", display: "block" }}
+      />
+    );
+  }
 
-    if (!isBlob) {
-      // ── Strategy A: move the node ──────────────────────────────────────────
-      const originalParent = el.parentElement;
-      const nextSibling    = el.nextSibling;
-      const placeholder    = document.createElement("div");
-      placeholder.style.cssText = `width:${el.offsetWidth}px;height:${el.offsetHeight}px;`;
-      originalParent?.insertBefore(placeholder, el);
-
-      el.style.cssText = "width:100%;height:100%;object-fit:contain;display:block;background:#111;";
-      el.controls      = true;
-      el.playsInline   = true;
-      container.appendChild(el);
-
-      return () => {
-        el.style.cssText = "";
-        if (originalParent && placeholder.parentElement === originalParent) {
-          originalParent.insertBefore(el, nextSibling || placeholder);
-          placeholder.remove();
-        }
-      };
-    }
-
-    // ── Strategy B: position-track the blob video ──────────────────────────
-    // Keep video in IG's DOM but make it visible and overlay our panel exactly.
-    const saved = {
-      position:   el.style.position,
-      top:        el.style.top,
-      left:       el.style.left,
-      width:      el.style.width,
-      height:     el.style.height,
-      zIndex:     el.style.zIndex,
-      visibility: el.style.visibility,
-      objectFit:  el.style.objectFit,
-      background: el.style.background,
-    };
-
-    el.controls    = true;
-    el.playsInline = true;
-
-    let rafId = 0;
-    function sync() {
-      const rect = container.getBoundingClientRect();
-      el.style.cssText = [
-        `position:fixed`,
-        `top:${rect.top}px`,
-        `left:${rect.left}px`,
-        `width:${rect.width}px`,
-        `height:${rect.height}px`,
-        `z-index:9999`,
-        `visibility:visible`,
-        `object-fit:contain`,
-        `background:#111`,
-        `pointer-events:auto`,
-      ].join(";");
-      rafId = requestAnimationFrame(sync);
-    }
-    sync();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      Object.assign(el.style, saved);
-    };
-  }, [videoEl]);
-
+  // Image slide, or video with no CDN url (use poster as static image)
+  const src = s.type === 'video' ? (s.poster || '') : s.url;
   return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", background: "#111" }}
+    <img
+      src={src}
+      alt=""
+      style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block" }}
     />
   );
 }

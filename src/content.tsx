@@ -21,7 +21,7 @@ import { loadSettings, getSettings, onSettingsChange } from './core/settings-eng
 import { upsertPosts, patchPost, refilter, onFeedChange, getFeed } from './core/feed-state-manager';
 import { watchDOM } from './core/performance-manager';
 import { scanFeed } from './adapters/instagram/dom-scanner';
-import { fetchFullCarousel } from './adapters/instagram/media-api';
+import { fetchFullSlides } from './adapters/instagram/media-api';
 import { App } from './ui/App';
 
 // ── Route helpers ─────────────────────────────────────────────────────────────
@@ -58,13 +58,19 @@ function expandAllCaptions(): Promise<void> {
 // IG lazy-renders only the first ~3 slides in the DOM.
 // After inserting posts we fetch the full list from the media API silently.
 
-async function backfillCarousels(posts: FeedPost[]): Promise<void> {
+async function backfillSlides(posts: FeedPost[]): Promise<void> {
   const settings = getSettings();
   for (const post of posts) {
-    if (post.videoEl) continue; // video posts don't need backfill
-    const full = await fetchFullCarousel(post.id);
-    if (full && full.length > post.images.length) {
-      patchPost(post.id, { images: full, totalSlides: full.length }, settings);
+    // Only worth calling the API if the DOM gave us few slides (lazy-loading)
+    // or if we got a blob video fallback (type=video, url===poster)
+    const hasBlobFallback = post.slides.some(
+      s => s.type === 'video' && s.url === s.poster
+    );
+    if (!hasBlobFallback && post.slides.length >= 3) continue;
+
+    const full = await fetchFullSlides(post.id);
+    if (full && full.length > 0) {
+      patchPost(post.id, { slides: full }, settings);
     }
   }
 }
@@ -154,7 +160,7 @@ async function scanAndIngest(): Promise<void> {
   const settings = getSettings();
   if (!posts.length) return;
   upsertPosts(posts, settings);
-  backfillCarousels(posts); // fire-and-forget
+  backfillSlides(posts); // fire-and-forget
 }
 
 // ── Route management ──────────────────────────────────────────────────────────

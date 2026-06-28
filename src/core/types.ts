@@ -23,18 +23,23 @@ export interface Author {
   profileUrl: string;
 }
 
+// One visual item inside a post (image or playable video).
+// For blob/DASH videos we degrade to the poster image because MediaSource
+// bindings can't be transferred across DOM trees.
+export interface Slide {
+  type: 'image' | 'video';
+  url: string;     // image URL  OR  video CDN URL
+  poster?: string; // video thumbnail (also used as fallback)
+}
+
 export interface FeedPost {
   id: string;
   type: PostType;
   reason: PostReason;
   author: Author;
-  images: string[];
-  videoEl: HTMLVideoElement | null;
-  videoPoster: string | null;
+  slides: Slide[];
   caption: string;
   timestamp: string;
-  // set after API backfill
-  totalSlides?: number;
 }
 
 export interface Settings {
